@@ -1,9 +1,18 @@
-// error.middleware.js
 export const errorHandler = (err, req, res, next) => {
-    const status = err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    let status = err.statusCode || 500;
+    let message = err.message || "Internal Server Error";
 
-    // En lugar de console.error(err), usamos algo más formateado:
+    // "Traducción" de errores de base de datos
+    if (err.name === 'CastError') {
+        status = 400;
+        message = `ID con formato inválido: ${err.value}`;
+    }
+
+    if (err.code === 11000) {
+        status = 409;
+        message = "El registro ya existe (clave duplicada)";
+    }
+
     console.error(`[ERROR ${status}]: ${message}`);
 
     res.status(status).json({

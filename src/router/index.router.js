@@ -32,9 +32,7 @@ router.use('/tickets', ticketRouter);
 // Mocking (para testing)
 router.use('/mocking', mockingRouter);
 
-// Admin / security (Generalmente se ubica bajo /admin o /security)
-// Nota: Aquí se usa '/admin' como prefijo en tu original, pero tu router se llama blacklist.router.js
-// Si el BlacklistRouter tiene rutas como '/' y lo montas en '/admin', las rutas serán /admin/
+// Blacklist
 router.use('/admin', blacklistRouter); 
 
 export default router;

@@ -1,76 +1,100 @@
-// controllers/ProductController.js
+import { NotFoundError, DuplicateResourceError } from "../errors/index.js";
 
 export default class ProductController {
-    /**
-     * @param {import('../../service/ProductService.js').default} productService
-     */
     constructor(productService) {
         this.productService = productService;
     }
 
-    // Create product
-    async createProduct(req, res) {
+    async createProduct(req, res, next) {
         try {
-            // Delegation to the Service (Service handles business validation)
             const newProduct = await this.productService.createProduct(req.body);
             res.status(201).json({ status: "success", payload: newProduct });
         } catch (error) {
-            // Service errors usually indicate bad data (400) or conflict (409)
-            const status = error.message.includes('exists') ? 409 : 400; 
-            res.status(status).json({ status: "error", message: error.message });
+            // Si el servicio detecta un código duplicado
+            if (error.message.includes('exists')) {
+                return next(new DuplicateResourceError("Producto", "código"));
+            }
+            next(error); 
         }
     }
 
-    // Get all products with pagination
-    async getAllProducts(req, res) {
+    async getAllProducts(req, res, next) {
         try {
+            const { limit, page, sort, query } = req.query;
+
+            let sortOption = {};
+            if (sort) {
+                if (sort === 'asc') sortOption = { price: 1 };
+                else if (sort === 'desc') sortOption = { price: -1 };
+                else sortOption = { price: sort === '1' ? 1 : -1 };
+            }
+
             const options = {
-                limit: parseInt(req.query.limit) || 10,
-                page: parseInt(req.query.page) || 1,
-                sort: req.query.sort || "price:1",
-                query: req.query.query ? JSON.parse(req.query.query) : {}
+                limit: parseInt(limit) || 10,
+                page: parseInt(page) || 1,
+                sort: sortOption,
+                lean: true 
             };
 
-            const products = await this.productService.getAllProducts(options);
+            let filter = {};
+            if (query) {
+                try {
+                    filter = JSON.parse(query);
+                } catch (e) {
+                    filter = { category: query };
+                }
+            }
+
+            const products = await this.productService.getAllProducts(filter, options);
             res.status(200).json({ status: "success", payload: products });
         } catch (error) {
-            res.status(500).json({ status: "error", message: error.message });
+            next(error);
         }
     }
 
-    // Get single product by ID
-    async getProductById(req, res) {
+    async getProductById(req, res, next) {
         try {
             const { id } = req.params;
             const product = await this.productService.getProductById(id);
+            
+            if (!product) {
+                throw new NotFoundError("Producto");
+            }
+            
             res.status(200).json({ status: "success", payload: product });
         } catch (error) {
-            // Service throws "Product not found"
-            res.status(404).json({ status: "error", message: error.message }); 
+            next(error);
         }
     }
 
-    // Update product
-    async updateProduct(req, res) {
+    async updateProduct(req, res, next) {
         try {
             const { id } = req.params;
             const updated = await this.productService.updateProduct(id, req.body);
+            
+            if (!updated) {
+                throw new NotFoundError("Producto");
+            }
+            
             res.status(200).json({ status: "success", payload: updated });
         } catch (error) {
-            // Service throws "Product not found"
-            res.status(404).json({ status: "error", message: error.message }); 
+            next(error);
         }
     }
 
-    // Delete product
-    async deleteProduct(req, res) {
+    async deleteProduct(req, res, next) {
         try {
             const { id } = req.params;
-            await this.productService.deleteProduct(id);
+            const result = await this.productService.deleteProduct(id);
+            
+            // Verificamos si el producto existía para ser borrado
+            if (!result) {
+                throw new NotFoundError("Producto");
+            }
+            
             res.status(200).json({ status: "success", message: "Product deleted successfully" });
         } catch (error) {
-            // Service throws "Product not found"
-            res.status(404).json({ status: "error", message: error.message });
+            next(error);
         }
     }
 }

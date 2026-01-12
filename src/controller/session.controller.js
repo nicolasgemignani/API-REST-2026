@@ -5,8 +5,9 @@ import { generateTokens } from '../jwt/generate.jwt.js';
 import { variables } from '../config/var.env.js';
 
 export default class SessionController {
-    constructor(userService) {
+    constructor(userService, blacklistService) {
         this.userService = userService;
+        this.blacklistService = blacklistService;
     }
 
     // Register a new user
@@ -63,26 +64,21 @@ export default class SessionController {
         if (!refreshToken) return res.status(401).json({ message: 'Refresh token missing' });
 
         try {
-            // Verify refresh token
             const decoded = jwt.verify(refreshToken, variables.REFRESH_KEY);
             const user = await this.userService.getUser(decoded.id);
 
-            // Check if user exists and if tokenId matches (security measure against token reuse)
             if (!user || user.tokenId !== decoded.tokenId) {
-                return res.status(403).json({ message: 'Invalid refresh token' });
+                return res.status(403).json({ message: 'Invalid refresh token', reason: 'TokenId mismatch' });
             }
 
-            // Generate new tokens
-            const { accessToken, refreshToken: newRefreshToken } = generateTokens({
-                id: user._id,
-                role: user.role,
-                first_name: user.first_name,
-                email: user.email,
-                cart: user.cart
-            });
+            // 1. Generamos EL ÚNICO tokenId nuevo
+            const newTokenId = crypto.randomUUID();
 
-            // Invalidate old token: update user's unique token ID
-            this.userService.updateTokenId(user._id, crypto.randomUUID());
+            // 2. Generamos tokens usando ese ID
+            const { accessToken, refreshToken: newRefreshToken } = generateTokens(user, newTokenId);
+
+            // 3. Actualizamos la DB UNA SOLA VEZ
+            await this.userService.updateTokenId(user._id, newTokenId);
 
             const cookieOptions = { 
                 httpOnly: true, 
@@ -90,23 +86,50 @@ export default class SessionController {
                 sameSite: 'Strict' 
             };
             
-            // Set new access token (short expiry) and new refresh token (long expiry)
-            res.cookie('token', accessToken, { ...cookieOptions, maxAge: 1000 * 60 * 15 }); // 15 mins
-            res.cookie('refreshToken', newRefreshToken, { ...cookieOptions, maxAge: 1000 * 60 * 60 * 24 * 7 }); // 7 days
+            res.cookie('token', accessToken, { ...cookieOptions, maxAge: 1000 * 60 * 15 });
+            res.cookie('refreshToken', newRefreshToken, { ...cookieOptions, maxAge: 1000 * 60 * 60 * 24 * 7 });
 
             res.status(200).json({ accessToken });
         } catch (error) {
-            console.error('Error refreshing token:', error);
-            res.status(403).json({ message: 'Invalid refresh token' });
+            res.status(403).json({ message: 'Invalid refresh token', debug: error.message }); 
         }
     }
 
     // Logout
     async logout(req, res) {
-        // Clear all session cookies
-        res.clearCookie('token');
-        res.clearCookie('refreshToken');
-        res.status(200).json({ status: 'success', message: 'Logged out successfully' });
+        try {
+            // 1. Obtener tokens (priorizamos body si no hay cookies para el test de Postman)
+            const accessToken = req.body.token || req.cookies?.token;
+            const refreshToken = req.cookies?.refreshToken;
+
+            // 2. Blacklist para el Access Token
+            if (accessToken) {
+                // Si el service espera (token, expires), calculamos el tiempo
+                const decodedAcc = jwt.decode(accessToken);
+                const now = Math.floor(Date.now() / 1000);
+                const ttl = decodedAcc ? (decodedAcc.exp - now) : 900; 
+
+                await this.blacklistService.addToBlacklist(accessToken, ttl);
+            }
+
+            // 3. Invalidar Refresh Token (Rotar el tokenId en la DB)
+            // Intentamos sacar el ID del refresh token
+            const decodedRef = refreshToken ? jwt.decode(refreshToken) : null;
+            
+            if (decodedRef && decodedRef.id) {
+                await this.userService.updateTokenId(decodedRef.id, crypto.randomUUID());
+            }
+
+            // 4. Limpiar cookies
+            res.clearCookie('token');
+            res.clearCookie('refreshToken');
+
+            return res.status(200).json({ message: "Sesión cerrada correctamente" });
+
+        } catch (error) {
+            console.error("FALLÓ EL LOGOUT:", error);
+            return res.status(500).json({ error: "Internal server error" });
+        }
     }
 
     // Get current user info (requires authentication middleware)

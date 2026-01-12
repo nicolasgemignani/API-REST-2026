@@ -15,12 +15,12 @@ export default class SessionRouter extends BaseRouter {
         this.post('/login', 'PUBLIC', this.controller.login);
 
         // [POST] /sessions/refresh-token
-        this.post('/refresh-token', 'USER', this.controller.refreshToken);
+        this.post('/refresh-token', 'user', this.controller.refreshToken);
 
         // [POST] /sessions/logout (Private - Any authenticated user)
-        this.post('/logout', 'USER', this.controller.logout);
+        this.post('/logout', 'user', this.controller.logout);
 
         // [GET] /sessions/current (Private - Any authenticated user)
-        this.get('/current', 'USER', this.controller.current);
+        this.get('/current', 'user', this.controller.current);
     }
 }

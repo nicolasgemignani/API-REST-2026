@@ -1,5 +1,3 @@
-// src/di.factory.js (O donde decidas colocar tu contenedor DI)
-
 // --- 1. Importar Capa de Persistencia (DAOs y Repositories) ---
 // Usaremos los Repositories (capa de abstracción) para inyectar en los Services.
 
@@ -78,12 +76,12 @@ export const blacklistController = new BlacklistController(blacklistService);
 export const cartController = new CartController(cartService);
 export const mockingController = new MockingController(productService, userService);
 export const productController = new ProductController(productService);
-export const sessionController = new SessionController(userService);
+export const sessionController = new SessionController(userService, blacklistService);
 export const ticketController = new TicketController(ticketService);
 export const userController = new UserController(userService);
 
 // ==========================================================
-// 🛣️ 4. ENSAMBLAJE DE ROUTERS (Inyectan Controllers) - ¡CORREGIDO!
+// 🛣️ 4. ENSAMBLAJE DE ROUTERS (Inyectan Controllers) -
 // ==========================================================
 
 // --- Función para instanciar, inicializar y exportar ---

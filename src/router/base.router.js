@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { passportCall } from "../jwt/passport.middleware.js"; 
-import { authorization } from "../middleware/auth/role.middleware.js";
+import { passportCall } from "../jwt/passport.middleware.js";
+import { AuthorizationError, AuthenticationError } from "../errors/index.js"
 
 export default class BaseRouter {
     constructor() {
@@ -43,11 +43,6 @@ export default class BaseRouter {
     }
     
     // --- Lógica de Manejo de Rutas ---
-
-    /**
-     * Wrapper para manejar los métodos asíncronos del Controller y capturar errores.
-     * @param {Function} callback - Método del Controller (ej: controller.getProducts).
-     */
     applyController(callback) {
         // Retorna una función de Express (req, res, next)
         return async (req, res, next) => {
@@ -61,34 +56,33 @@ export default class BaseRouter {
         };
     }
 
-    /**
-     * Genera la secuencia de middlewares para autenticación y autorización.
-     * @param {string} policy - El rol requerido ('admin', 'user', 'public', etc.).
-     */
     handlePolicies(policy) {
         return (req, res, next) => {
-            // 1. Manejo de acceso público (no se requiere token)
-            if (policy.toUpperCase() === 'PUBLIC') {
-                return next();
-            }
+            // 1. Si es público, pasa directo
+            if (policy.toUpperCase() === 'PUBLIC') return next();
 
-            // 2. Aplicar autenticación JWT usando passportCall
-            // Si la autenticación falla, passportCall devolverá un error 401.
-            // Si es exitosa, llenará req.user.
-            passportCall("jwt", { session: false })(req, res, (err) => {
-                if (err) return next(err); // Propaga errores (ej. token inválido o expirado)
+            // 2. Ejecutamos Passport para autenticar el token JWT
+            passportCall('jwt')(req, res, (err) => {
+                // Si hubo un error en el proceso de autenticación o no hay usuario
+                if (err || !req.user) {
+                    return next(new AuthenticationError("Token inválido o ausente"));
+                }
 
-                // 3. Aplicar autorización (verifica el rol en req.user)
-                // Usamos la función authorization que tú ya definiste.
-                authorization(policy)(req, res, next);
+                // 3. Verificación de Rol (Autorización)
+                const userRole = req.user.role?.toUpperCase();
+                const requiredRole = policy.toUpperCase();
+
+                // Si el usuario no tiene el rol necesario
+                if (userRole !== requiredRole && requiredRole !== 'USER') { 
+                    // Nota: Podrías expandir esto si un ADMIN también puede hacer cosas de USER
+                    return next(new AuthorizationError());
+                }
+
+                next();
             });
         };
     }
 
-    /**
-     * Método abstracto que debe ser implementado por la subclase.
-     * Aquí se definen las rutas específicas.
-     */
     init() {
         throw new Error("The init() method must be implemented by the subclass.");
     }

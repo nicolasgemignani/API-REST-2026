@@ -1,9 +1,4 @@
-// controllers/BlacklistController.js
-
 export default class BlacklistController {
-    /**
-     * @param {import('../../service/BlacklistService.js').default} blacklistService
-     */
     constructor(blacklistService) {
         this.blacklistService = blacklistService;
     }
@@ -37,22 +32,19 @@ export default class BlacklistController {
 
     async getTokenBlacklist(req, res) {
         try {
-            // Assuming the token ID is extracted by a previous middleware (e.g., JWT strategy)
-            const { tokenId } = req.user; 
+            // Ahora lo buscamos en el query: ?token=...
+            const { token } = req.query; 
 
-            if (!tokenId) {
-                return res.status(400).json({ message: "TokenId is required" });
-            }
+            if (!token) return res.status(400).json({ message: "Token is required" });
 
-            const entry = await this.blacklistService.getBlacklistedToken(tokenId);
+            const entry = await this.blacklistService.getBlacklistedToken(token);
 
             if (!entry) {
                 return res.status(404).json({ message: "Token not found in blacklist" });
             }
 
-            res.status(200).json({ token: entry });
+            res.status(200).json({ status: "success", payload: entry });
         } catch (error) {
-            console.error("Error retrieving blacklist token:", error);
             res.status(500).json({ message: "Internal server error" });
         }
     }

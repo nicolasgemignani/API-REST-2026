@@ -7,16 +7,16 @@ const blacklistSchema = new mongoose.Schema(
     token: {
       type: String,
       required: true,
-      index: true, // Improves lookup performance
+      index: true, 
     },
     expiresAt: {
       type: Date,
       required: true,
-      description: "Date when the token becomes invalid",
+      index: { expires: 0 } 
     },
   },
   {
-    timestamps: true, // Adds createdAt & updatedAt
+    timestamps: true,
   }
 );
 
